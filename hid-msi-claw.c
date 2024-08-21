@@ -59,7 +59,7 @@ static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_g
 {
 	int ret;
 	const unsigned char buf[] = {
-		0, 0, 60, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (unsigned char)mode, (unsigned char)mkeys, 0, 0
+		FEATURE_GAMEPAD_REPORT_ID, 0, 0, 60, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (unsigned char)mode, (unsigned char)mkeys, 0
 	};
 	unsigned char *dmabuf = kmemdup(buf, sizeof(buf), GFP_KERNEL);
 
@@ -69,66 +69,13 @@ static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_g
 		return ret;
 	}
 
-	ret = hid_hw_raw_request(hdev, FEATURE_GAMEPAD_REPORT_ID, dmabuf, sizeof(buf),
-					HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
+	ret = hid_hw_output_report(hdev, dmabuf, sizeof(buf));
 
 	kfree(dmabuf);
 
 	if (ret != sizeof(buf)) {
 		hid_err(hdev, "msi-claw failed to switch controller mode: %d\n", ret);
-
-        const unsigned char buf2[] = {
-            0, 0, 60, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (unsigned char)mode, (unsigned char)mkeys, 0
-        };
-        dmabuf = kmemdup(buf2, sizeof(buf2), GFP_KERNEL);
-
-        if (!dmabuf) {
-            ret = -ENOMEM;
-            hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
-            return ret;
-        }
-
-        ret = hid_hw_raw_request(hdev, FEATURE_GAMEPAD_REPORT_ID, dmabuf, sizeof(buf2),
-                        HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
-
-        kfree(dmabuf);
-
-        if (ret != sizeof(buf)) {
-		    hid_err(hdev, "msi-claw failed to switch controller mode (3): %d\n", ret);
-            
-            const unsigned char buf3[] = {
-                0, 0, 60, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (unsigned char)mode, (unsigned char)mkeys
-            };
-            dmabuf = kmemdup(buf3, sizeof(buf3), GFP_KERNEL);
-
-            if (!dmabuf) {
-                ret = -ENOMEM;
-                hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
-                return ret;
-            }
-
-            ret = hid_hw_raw_request(hdev, FEATURE_GAMEPAD_REPORT_ID, dmabuf, sizeof(buf3),
-                            HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
-
-            kfree(dmabuf);
-
-            if (ret != sizeof(buf)) {
-                hid_err(hdev, "msi-claw failed to switch controller mode (3): %d\n", ret);
-                
-                
-                return ret;
-            } else {
-                return 0;
-            }
-            
-            return ret;
-        } else {
-            return 0;
-        }
-
-		return ret;
-	} else {
-        return 0;
+        return ret;
     }
 
 	return 0;
@@ -206,7 +153,7 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
     if (ret != 0) {
         hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
 
-        // improve this
+        // TODO: improve this
         ret = -ENODEV;
 
         goto err_stop_hw;
@@ -230,8 +177,7 @@ static void msi_claw_remove(struct hid_device *hdev)
 }
 
 static const struct hid_device_id msi_claw_devices[] = {
-	{ HID_USB_DEVICE(0x0DB0,
-	    0x1901) },
+	{ HID_USB_DEVICE(0x0DB0, 0x1901) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, msi_claw_devices);
@@ -242,9 +188,9 @@ static struct hid_driver msi_claw_driver = {
 	//.report_fixup	= asus_report_fixup,
 	.probe                  = msi_claw_probe,
 	.remove			= msi_claw_remove,
-	.input_mapping          = msi_claw_input_mapping,
-	.event			= msi_claw_event,
-	.raw_event		= msi_claw_raw_event
+	//.input_mapping          = msi_claw_input_mapping,
+	//.event			= msi_claw_event,
+	//.raw_event		= msi_claw_raw_event
 };
 module_hid_driver(msi_claw_driver);
 
