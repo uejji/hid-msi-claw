@@ -1,6 +1,6 @@
 _pkgname=hid-msi-claw
 pkgname=$_pkgname-dkms
-pkgver=0.0.1
+pkgver=0.0.2
 pkgrel=1
 pkgdesc='Linux kernel driver for MSI Calw device'
 arch=('x86_64')
