@@ -5,7 +5,10 @@
 
 //#include "hid-ids.h"
 
-#define FEATURE_GAMEPAD_REPORT_ID 0x0f
+#define MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID	0x0f
+
+#define MSI_CLAW_GAME_CONTROL_DESC			0x05
+#define MSI_CLAW_DEVICE_CONTROL_DESC		0x06
 
 enum msi_claw_gamepad_mode {
     MSI_CLAW_GAMEPAD_MODE_OFFLINE = 0,
@@ -59,10 +62,11 @@ static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_g
 {
 	int ret;
 	const unsigned char buf[] = {
-		FEATURE_GAMEPAD_REPORT_ID, 0, 0, 60, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (unsigned char)mode, (unsigned char)mkeys, 0
+		MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, 0, 0, 60,
+		MSI_CLAW_COMMAND_TYPE_SWITCH_MODE,
+		(unsigned char)mode, (unsigned char)mkeys, 0
 	};
 	unsigned char *dmabuf = kmemdup(buf, sizeof(buf), GFP_KERNEL);
-
 	if (!dmabuf) {
 		ret = -ENOMEM;
 		hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
@@ -89,22 +93,12 @@ static int msi_claw_raw_event(struct hid_device *hdev,
 	return 0;
 }
 
-/*
-#define asus_map_key_clear(c)	hid_map_usage_clear(hi, usage, bit, \
-						    max, EV_KEY, (c))
-*/
 static int msi_claw_input_mapping(struct hid_device *hdev,
 		struct hid_input *hi, struct hid_field *field,
 		struct hid_usage *usage, unsigned long **bit,
 		int *max)
 {
 	struct msi_claw_drvdata *drvdata = hid_get_drvdata(hdev);
-
-    /*
-    if ((usage->hid & HID_USAGE_PAGE) == HID_UP_ASUSVENDOR) {
-		switch (usage->hid & HID_USAGE) {
-		case 0x10: asus_map_key_clear(KEY_BRIGHTNESSDOWN);	break;
-    */
 
     return 0;
 }
@@ -138,7 +132,7 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
     ret = hid_parse(hdev);
 	if (ret) {
 		hid_err(hdev, "msi-claw hid parse failed: %d\n", ret);
-		return -ENODEV;
+		return ret;
 	}
 
     ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
@@ -149,18 +143,13 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
 
     hid_err(hdev, "msi-claw on %d\n", (int)hdev->rdesc[0]);
 
-    ret = msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_XINPUT, MSI_CLAW_MKEY_FUNCTION_MACRO);
-    if (ret != 0) {
-        hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
-
-        // TODO: improve this
-        ret = -ENODEV;
-
-        goto err_stop_hw;
-    }
-
-    // TODO: remove me
-    hid_err(hdev, "msi-claw started\n");
+	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
+		ret = msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_XINPUT, MSI_CLAW_MKEY_FUNCTION_MACRO);
+		if (ret != 0) {
+			hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
+			goto err_stop_hw;
+		}
+	}
 
     return 0;
 
@@ -183,12 +172,11 @@ static const struct hid_device_id msi_claw_devices[] = {
 MODULE_DEVICE_TABLE(hid, msi_claw_devices);
 
 static struct hid_driver msi_claw_driver = {
-	.name			= "msi-claw",
-	.id_table		= msi_claw_devices,
-	//.report_fixup	= asus_report_fixup,
-	.probe                  = msi_claw_probe,
-	.remove			= msi_claw_remove,
-	//.input_mapping          = msi_claw_input_mapping,
+	.name				= "msi-claw",
+	.id_table			= msi_claw_devices,
+	.probe				= msi_claw_probe,
+	.remove				= msi_claw_remove,
+	//.input_mapping	= msi_claw_input_mapping,
 	//.event			= msi_claw_event,
 	//.raw_event		= msi_claw_raw_event
 };
