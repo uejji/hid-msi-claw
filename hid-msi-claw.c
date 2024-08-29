@@ -10,7 +10,8 @@
 #define MSI_CLAW_GAME_CONTROL_DESC			0x05
 #define MSI_CLAW_DEVICE_CONTROL_DESC		0x06
 
-enum msi_claw_gamepad_mode {
+enum msi_claw_gamepad_mode
+{
     MSI_CLAW_GAMEPAD_MODE_OFFLINE = 0,
     MSI_CLAW_GAMEPAD_MODE_XINPUT,
     MSI_CLAW_GAMEPAD_MODE_DINPUT,
@@ -21,12 +22,14 @@ enum msi_claw_gamepad_mode {
     MSI_CLAW_GAMEPAD_MODE_MAX
 };
 
-enum msi_claw_mkeys_function {
+enum msi_claw_mkeys_function
+{
     MSI_CLAW_MKEY_FUNCTION_MACRO,
     MSI_CLAW_MKEY_FUNCTION_COMBINATION,
 };
 
-enum msi_claw_command_type {
+enum msi_claw_command_type
+{
     MSI_CLAW_COMMAND_TYPE_ENTER_PROFILE_CONFIG = 1,
     MSI_CLAW_COMMAND_TYPE_EXIT_PROFILE_CONFIG = 2,
     MSI_CLAW_COMMAND_TYPE_WRITE_PROFILE = 3,
@@ -51,20 +54,20 @@ enum msi_claw_command_type {
     MSI_CLAW_COMMAND_TYPE_CALIBRATION_ACK = 254,
 };
 
-struct msi_claw_drvdata {
+struct msi_claw_drvdata
+{
 	struct hid_device *hdev;
 	struct input_dev *input;
 	struct input_dev *tp_kbd_input;
 };
 
-static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_gamepad_mode mode,
-        enum msi_claw_mkeys_function mkeys)
+static int msi_claw_write_cmd(struct hid_device *hdev, enum msi_claw_command_type,
+        u8 b1, u8 b2, u8 b3)
 {
 	int ret;
 	const unsigned char buf[] = {
 		MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, 0, 0, 60,
-		MSI_CLAW_COMMAND_TYPE_SWITCH_MODE,
-		(unsigned char)mode, (unsigned char)mkeys, 0
+		MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, b1, b2, b3
 	};
 	unsigned char *dmabuf = kmemdup(buf, sizeof(buf), GFP_KERNEL);
 	if (!dmabuf) {
@@ -81,6 +84,98 @@ static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_g
 		hid_err(hdev, "msi-claw failed to switch controller mode: %d\n", ret);
         return ret;
     }
+
+	return 0;
+}
+
+static int msi_claw_read(struct hid_device *hdev, u8 *const buffer)
+{
+	int ret;
+
+	unsigned char *dmabuf = kmemdup(buffer, 8, GFP_KERNEL);
+	if (!dmabuf) {
+		ret = -ENOMEM;
+		hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
+		return ret;
+	}
+
+	// also HID_FEATURE_REPORT
+	ret = hid_hw_raw_request(hdev, MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, dmabuf, 8, HID_INPUT_REPORT, HID_REQ_GET_REPORT);
+
+	if (ret >= 8) {
+		hid_err(hdev, "msi-claw read %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x \n", ret,
+		   dmabuf[0], dmabuf[1], dmabuf[2], dmabuf[3], dmabuf[4], dmabuf[5], dmabuf[6], dmabuf[7]);
+		memcpy((void*)buffer, dmabuf, 8);
+		ret = 0;
+	} else if (ret < 0) {
+		hid_err(hdev, "msi-claw failed to read: %d\n", ret);
+		goto msi_claw_read_err;
+	} else {
+		hid_err(hdev, "msi-claw read %d bytes\n", ret);
+		ret = -EINVAL;
+		goto msi_claw_read_err;
+	}
+
+msi_claw_read_err:
+	kfree(dmabuf);
+
+	return ret;
+}
+
+static int msi_claw_read2(struct hid_device *hdev, u8 *const buffer)
+{
+	int ret;
+
+	unsigned char *dmabuf = kmemdup(buffer, 8, GFP_KERNEL);
+	if (!dmabuf) {
+		ret = -ENOMEM;
+		hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
+		return ret;
+	}
+
+	// also HID_FEATURE_REPORT
+	ret = hid_hw_raw_request(hdev, 0x06, dmabuf, 8, HID_INPUT_REPORT, HID_REQ_GET_REPORT);
+
+	if (ret >= 8) {
+		hid_err(hdev, "msi-claw read2 %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x \n", ret,
+		   dmabuf[0], dmabuf[1], dmabuf[2], dmabuf[3], dmabuf[4], dmabuf[5], dmabuf[6], dmabuf[7]);
+		memcpy((void*)buffer, dmabuf, 8);
+		ret = 0;
+	} else if (ret < 0) {
+		hid_err(hdev, "msi-claw failed to read2: %d\n", ret);
+		goto msi_claw_read2_err;
+	} else {
+		hid_err(hdev, "msi-claw read2 %d bytes\n", ret);
+		ret = -EINVAL;
+		goto msi_claw_read2_err;
+	}
+
+msi_claw_read2_err:
+	kfree(dmabuf);
+
+	return ret;
+}
+
+static int msi_claw_switch_gamepad_mode(struct hid_device *hdev, enum msi_claw_gamepad_mode mode,
+        enum msi_claw_mkeys_function mkeys)
+{
+	int ret;
+
+	ret = msi_claw_write_cmd(hdev, MSI_CLAW_COMMAND_TYPE_SWITCH_MODE, (u8)mode, (u8)mkeys, (u8)0);
+	if (ret != 0) {
+		hid_err(hdev, "msi-claw failed to send write request for switch controller mode: %d\n", ret);
+        return ret;
+    }
+
+	ret = msi_claw_write_cmd(hdev, MSI_CLAW_COMMAND_TYPE_READ_GAMEPAD_MODE, (u8)0, (u8)0, (u8)0);
+	if (ret != 0) {
+		hid_err(hdev, "msi-claw failed to send read request for controller mode: %d\n", ret);
+        return ret;
+    }
+
+	u8 buf[8];
+	msi_claw_read(hdev, buf);
+	msi_claw_read2(hdev, buf);
 
 	return 0;
 }
