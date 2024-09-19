@@ -18,7 +18,21 @@ enum msi_claw_gamepad_mode {
 	MSI_CLAW_GAMEPAD_MODE_DESKTOP,
 	MSI_CLAW_GAMEPAD_MODE_BIOS,
 	MSI_CLAW_GAMEPAD_MODE_TESTING,
-	MSI_CLAW_GAMEPAD_MODE_MAX
+};
+
+static const bool gamepad_mode_debug = false;
+
+static const struct {
+	const char* name;
+	const bool available;
+} gamepad_mode_map[] = {
+	{"offline", gamepad_mode_debug},
+	{"xinput", true},
+	{"dinput", gamepad_mode_debug},
+	{"msi", gamepad_mode_debug},
+	{"desktop", true},
+	{"bios", gamepad_mode_debug},
+	{"testing", gamepad_mode_debug},
 };
 
 enum msi_claw_mkeys_function {
@@ -56,6 +70,8 @@ struct msi_claw_drvdata {
 	struct input_dev *input;
 	struct input_dev *tp_kbd_input;
 };
+
+static enum msi_claw_gamepad_mode gamepad_mode = MSI_CLAW_GAMEPAD_MODE_XINPUT;
 
 static int msi_claw_write_cmd(struct hid_device *hdev, enum msi_claw_command_type,
         u8 b1, u8 b2, u8 b3)
@@ -192,6 +208,62 @@ static int msi_claw_event(struct hid_device *hdev, struct hid_field *field, stru
 	return 0;
 }
 
+static ssize_t gamepad_mode_available_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret = 0;
+	int len = ARRAY_SIZE(gamepad_mode_map);
+
+	for (int i = 0; i < len; i++)
+	{
+		if (!gamepad_mode_map[i].available)
+			continue;
+
+		ret += sysfs_emit_at(buf, ret, "%s", gamepad_mode_map[i].name);
+
+		if (i < len-1)
+			ret += sysfs_emit_at(buf, ret, " ");
+	}
+	ret += sysfs_emit_at(buf, ret, "\n");
+
+	return ret;
+}
+static DEVICE_ATTR_RO(gamepad_mode_available);
+
+static ssize_t gamepad_mode_current_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n", gamepad_mode_map[gamepad_mode].name);
+}
+
+static ssize_t gamepad_mode_current_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	ssize_t ret = -EINVAL;
+
+	if (!count)
+		return ret;
+
+	char* input = kmemdup(buf, count+1, GFP_KERNEL);
+	if (!input)
+		return -ENOMEM;
+
+	input[count] = '\0';
+	if (input[count-1] == '\n')
+		input[count-1] = '\0';
+
+	for (int i = 0; i < ARRAY_SIZE(gamepad_mode_map); i++)
+		if (!strcmp(input, gamepad_mode_map[i].name)) {
+			if (gamepad_mode_map[i].available) {
+				gamepad_mode = i;
+				msi_claw_switch_gamepad_mode(to_hid_device(dev), gamepad_mode, MSI_CLAW_MKEY_FUNCTION_MACRO);
+				ret = count;
+			}
+			break;
+		}
+
+	kfree(input);
+	return ret;
+}
+static DEVICE_ATTR_RW(gamepad_mode_current);
+
 static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret;
@@ -230,6 +302,12 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
 			hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
 			goto err_stop_hw;
 		}
+
+		ret = sysfs_create_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_available.attr);
+		if (ret) return ret;
+
+		ret = sysfs_create_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_current.attr);
+		if (ret) return ret;
 	}
 
 	return 0;
@@ -243,8 +321,11 @@ static void msi_claw_remove(struct hid_device *hdev)
 {
 	struct msi_claw_drvdata *drvdata = hid_get_drvdata(hdev);
 
-	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC)
-		msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_DESKTOP, MSI_CLAW_MKEY_FUNCTION_MACRO);
+	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
+		msi_claw_switch_gamepad_mode(hdev, gamepad_mode, MSI_CLAW_MKEY_FUNCTION_MACRO);
+		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_available.attr);
+		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_current.attr);
+	}
 
 	hid_hw_stop(hdev);
 }
