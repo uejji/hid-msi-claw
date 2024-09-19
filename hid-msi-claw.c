@@ -243,6 +243,9 @@ static void msi_claw_remove(struct hid_device *hdev)
 {
 	struct msi_claw_drvdata *drvdata = hid_get_drvdata(hdev);
 
+	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC)
+		msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_DESKTOP, MSI_CLAW_MKEY_FUNCTION_MACRO);
+
 	hid_hw_stop(hdev);
 }
 
