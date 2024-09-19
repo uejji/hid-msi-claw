@@ -118,7 +118,10 @@ static int msi_claw_read(struct hid_device *hdev, u8 *const buffer)
 		return ret;
 	}
 
-	ret = hid_hw_raw_request(hdev, MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, dmabuf, 8, HID_INPUT_REPORT, HID_REQ_GET_REPORT);
+	// Add here what did not work
+	//ret = hid_hw_raw_request(hdev, MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, dmabuf, 8, HID_INPUT_REPORT, HID_REQ_GET_REPORT);
+	//ret = hid_hw_raw_request(hdev, 0x06, dmabuf, 8, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
+	ret = hid_hw_raw_request(hdev, MSI_CLAW_FEATURE_GAMEPAD_REPORT_ID, dmabuf, 8, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 
 	if (ret >= 8) {
 		hid_err(hdev, "msi-claw read %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x \n", ret,
@@ -135,39 +138,6 @@ static int msi_claw_read(struct hid_device *hdev, u8 *const buffer)
 	}
 
 msi_claw_read_err:
-	kfree(dmabuf);
-
-	return ret;
-}
-
-static int msi_claw_read2(struct hid_device *hdev, u8 *const buffer)
-{
-	int ret;
-
-	unsigned char *dmabuf = kmemdup(buffer, 8, GFP_KERNEL);
-	if (!dmabuf) {
-		ret = -ENOMEM;
-		hid_err(hdev, "msi-claw failed to alloc dma buf: %d\n", ret);
-		return ret;
-	}
-
-	ret = hid_hw_raw_request(hdev, 0x06, dmabuf, 8, HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
-
-	if (ret >= 8) {
-		hid_err(hdev, "msi-claw read2 %d bytes: %02x %02x %02x %02x %02x %02x %02x %02x \n", ret,
-			dmabuf[0], dmabuf[1], dmabuf[2], dmabuf[3], dmabuf[4], dmabuf[5], dmabuf[6], dmabuf[7]);
-		memcpy((void*)buffer, dmabuf, 8);
-		ret = 0;
-	} else if (ret < 0) {
-		hid_err(hdev, "msi-claw failed to read2: %d\n", ret);
-		goto msi_claw_read2_err;
-	} else {
-		hid_err(hdev, "msi-claw read2 %d bytes\n", ret);
-		ret = -EINVAL;
-		goto msi_claw_read2_err;
-	}
-
-msi_claw_read2_err:
 	kfree(dmabuf);
 
 	return ret;
@@ -322,6 +292,21 @@ static ssize_t mkeys_function_current_store(struct device *dev, struct device_at
 }
 static DEVICE_ATTR_RW(mkeys_function_current);
 
+static ssize_t debug_read_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct hid_device *hdev = to_hid_device(dev);
+	u8 buffer[8] = {};
+
+	const int res = msi_claw_read(hdev, buffer);
+
+	return sysfs_emit(buf, "%d -> %02x%02x%02x%02x%02x%02x%02x%02x\n",
+		res,
+		buffer[0], buffer[1], buffer[2], buffer[3],
+		buffer[4], buffer[5], buffer[6], buffer[7]
+	);
+}
+static DEVICE_ATTR_RO(debug_read);
+
 static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	int ret;
@@ -371,6 +356,9 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
 		if (ret) return ret;
 
 		ret = sysfs_create_file(&hdev->dev.kobj, &dev_attr_mkeys_function_current.attr);
+		if (ret) return ret;
+
+		ret = sysfs_create_file(&hdev->dev.kobj, &dev_attr_debug_read.attr);
 		if (ret) return ret;
 	}
 
