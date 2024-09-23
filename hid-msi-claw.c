@@ -340,7 +340,7 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
 //	hid_err(hdev, "msi-claw on %d\n", (int)hdev->rdesc[0]);
 
 	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
-		ret = msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_XINPUT, MSI_CLAW_MKEY_FUNCTION_MACRO);
+		ret = msi_claw_switch_gamepad_mode(hdev, gamepad_mode, mkeys_function);
 		if (ret != 0) {
 			hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
 			goto err_stop_hw;
@@ -374,7 +374,7 @@ static void msi_claw_remove(struct hid_device *hdev)
 	struct msi_claw_drvdata *drvdata = hid_get_drvdata(hdev);
 
 	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
-		msi_claw_switch_gamepad_mode(hdev, gamepad_mode, mkeys_function);
+		msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_DESKTOP, MSI_CLAW_MKEY_FUNCTION_MACRO);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_available.attr);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_current.attr);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_mkeys_function_available.attr);
