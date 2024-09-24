@@ -10,6 +10,8 @@
 #define MSI_CLAW_GAME_CONTROL_DESC		0x05
 #define MSI_CLAW_DEVICE_CONTROL_DESC		0x06
 
+#define MSI_CLAW_DEVICE_DINPUT_VERSION		0x1101
+
 enum msi_claw_gamepad_mode {
 	MSI_CLAW_GAMEPAD_MODE_OFFLINE,
 	MSI_CLAW_GAMEPAD_MODE_XINPUT,
@@ -28,7 +30,7 @@ static const struct {
 } gamepad_mode_map[] = {
 	{"offline", gamepad_mode_debug},
 	{"xinput", true},
-	{"dinput", gamepad_mode_debug},
+	{"dinput", true},
 	{"msi", gamepad_mode_debug},
 	{"desktop", true},
 	{"bios", gamepad_mode_debug},
@@ -337,15 +339,15 @@ static int msi_claw_probe(struct hid_device *hdev, const struct hid_device_id *i
 		return ret;
 	}
 
-//	hid_err(hdev, "msi-claw on %d\n", (int)hdev->rdesc[0]);
-
 	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
 		ret = msi_claw_switch_gamepad_mode(hdev, gamepad_mode, mkeys_function);
 		if (ret != 0) {
 			hid_err(hdev, "msi-claw failed to initialize controller mode: %d\n", ret);
 			goto err_stop_hw;
 		}
+	}
 
+	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC || hdev->version == MSI_CLAW_DEVICE_DINPUT_VERSION) {
 		ret = sysfs_create_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_available.attr);
 		if (ret) return ret;
 
@@ -373,12 +375,13 @@ static void msi_claw_remove(struct hid_device *hdev)
 {
 	struct msi_claw_drvdata *drvdata = hid_get_drvdata(hdev);
 
-	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC) {
+	if (hdev->rdesc[0] == MSI_CLAW_DEVICE_CONTROL_DESC || hdev->version == MSI_CLAW_DEVICE_DINPUT_VERSION) {
 		msi_claw_switch_gamepad_mode(hdev, MSI_CLAW_GAMEPAD_MODE_DESKTOP, MSI_CLAW_MKEY_FUNCTION_MACRO);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_available.attr);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_gamepad_mode_current.attr);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_mkeys_function_available.attr);
 		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_mkeys_function_current.attr);
+		sysfs_remove_file(&hdev->dev.kobj, &dev_attr_debug_read.attr);
 	}
 
 	hid_hw_stop(hdev);
@@ -386,6 +389,7 @@ static void msi_claw_remove(struct hid_device *hdev)
 
 static const struct hid_device_id msi_claw_devices[] = {
 	{ HID_USB_DEVICE(0x0DB0, 0x1901) },
+	{ HID_USB_DEVICE(0x0DB0, 0x1902) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, msi_claw_devices);
